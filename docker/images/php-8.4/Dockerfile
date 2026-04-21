@@ -1,4 +1,4 @@
-FROM php:7.4-fpm-bullseye
+FROM php:8.4-fpm-bullseye
 
 # нужные пакеты
 RUN apt-get update && apt-get install -y \
@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
         pkg-config \
         nmap \
         htop \
+        msmtp \
         git \
         git-lfs
 
@@ -27,9 +28,9 @@ RUN apt-get update && apt-get install -y \
         && docker-php-ext-install pdo \
         && docker-php-ext-install pdo_mysql \
         && docker-php-ext-install mysqli \
-        && pecl install memcached-3.1.5 && docker-php-ext-enable memcached \
-        && pecl install memcache-4.0.5.2 && docker-php-ext-enable memcache \
-        && pecl install xdebug-3.1.6 && docker-php-ext-enable xdebug \
+        && pecl install memcached-3.3.0 && docker-php-ext-enable memcached \
+        && pecl install memcache-8.2 && docker-php-ext-enable memcache \
+        && pecl install xdebug-3.4.1 && docker-php-ext-enable xdebug \
         && docker-php-ext-configure gd --enable-gd --with-freetype --with-jpeg --with-webp; \
         docker-php-ext-install -j$(nproc) gd \
         && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -44,14 +45,8 @@ RUN if [ "$COMPOSE_PROFILES" = "portal" ]; then \
         && apt-get clean && rm -rf /var/lib/apt/lists/* ; \
     fi
 
-# Настройки почтовика
-RUN if [ $(uname -m) = "x86_64" ]; then \
-        curl -Lsf 'https://storage.googleapis.com/golang/go1.17.4.linux-amd64.tar.gz' | tar -C '/usr/local' -xvzf -; \
-    else \
-        curl -Lsf 'https://storage.googleapis.com/golang/go1.17.4.linux-arm64.tar.gz' | tar -C '/usr/local' -xvzf -; \
-    fi
-ENV PATH /usr/local/go/bin:$PATH
-RUN go get github.com/mailhog/mhsendmail && cp /root/go/bin/mhsendmail /usr/bin/mhsendmail
+# Копируем msmtprc конфиг
+COPY ./msmtprc /etc/msmtprc
 
 # Добавим свой php.ini, можем в нем определять свои значения конфига
 COPY ./php.ini /usr/local/etc/php/conf.d/40-custom.ini

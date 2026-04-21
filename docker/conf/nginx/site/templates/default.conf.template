@@ -1,105 +1,85 @@
-# Default website
-server {
+worker_processes 8;
+error_log /var/log/nginx/error.log warn;
+pid /var/run/nginx.pid;
+worker_rlimit_nofile 10240;
 
-    listen       ${NGINX_PORT};
-    listen       ${NGINX_PORT_SSL} ssl http2;
+events {
+    use epoll;
+    worker_connections  10240;
+}
 
-    ssl_certificate     /root/mkcert/build-ca.crt;
-    ssl_certificate_key /root/mkcert/${NGINX_HOST}-key.pem;
+http {
 
-    server_name  ${NGINX_HOST};
-    index index.php index.html;
-    root /var/www/html;
+    include /etc/nginx/mime.types;
+    default_type application/force-download;
+    server_names_hash_bucket_size 128;
 
-     # If they come here using HTTP, bounce them to the correct scheme
-    error_page 497 https://$server_name:$server_port$request_uri;
+    # Description of supported access log formats
+    log_format main	'$remote_addr - $remote_user [$time_local - $upstream_response_time] '
+              '$status "$request" $body_bytes_sent '
+              '"$http_referer" "$http_user_agent" "$http_x_forwarded_for"';
 
-    location ~* \.(jpg|jpeg|png|tiff|gif|webp|xml|html|yml|ogg|ogv|svg|svgz|eot|otf|woff|woff2|mp4|ttf|rss|atom|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|rtf|pdf|txt|js|css|bmp|pnm|pbm|ppm)$ {
-	access_log off;
-	expires 97d;
+    log_format common '$remote_addr - - [$time_local - $upstream_response_time] '
+                '"$request" $status $bytes_sent '
+                '"$http_referer" "$http_user_agent" $msec';
+
+  log_format balancer '$remote_addr - $remote_user [$time_iso8601] "$host" '
+                    '"$request" $status $body_bytes_sent "schema: $scheme" '
+                    '"$http_referer" "$http_user_agent" "$http_x_forwarded_for" '
+                    '"$request_length" : "$request_time" -> $upstream_response_time';
+
+    log_format debug '$upstream_response_time,"$time_local","$remote_addr","$request",$status,$body_bytes_sent';
+
+    server_tokens off;
+
+    # Disable request logging in nginx by default
+    #access_log /var/log/nginx/access.log  common;
+    access_log			off;
+
+    sendfile			on;
+    tcp_nopush			on;
+    tcp_nodelay			on;
+
+    client_max_body_size		1024m;
+    client_body_buffer_size		4m;
+
+    # Parameters for back-end request proxy
+    proxy_connect_timeout		300;
+    proxy_send_timeout		300;
+    proxy_read_timeout		300;
+    proxy_buffer_size		64k;
+    proxy_buffers			8 256k;
+    proxy_busy_buffers_size		256k;
+    proxy_temp_file_write_size	10m;
+
+    # Assign default error handlers
+    error_page 500 502 503 504 /500.html;
+    error_page 404 = /404.html;
+
+    # Content compression parameters
+    gzip				on;
+    gzip_proxied			any;
+    gzip_static			on;
+    gzip_http_version		1.0;
+    gzip_types			application/x-javascript application/javascript text/css;
+
+    # Bitrix Composite Conditions
+    modern_browser_value "modern";
+    modern_browser msie 10.0;
+    modern_browser unlisted;
+
+    map "$cookie_BITRIX_SM_LOGIN:$cookie_BITRIX_SM_UIDH:$cookie_BITRIX_SM_CC" $storedAuth {
+    	default "";
+    	"~*:*:Y" "";
+    	"~*:*:*" 1;
+    	"~*:*:" 1;
+    }
+    map "$request_method:$http_bx_action_type:$cookie_BITRIX_SM_NCC:$http_x_forwarded_scheme:$modern_browser:$storedAuth" $usecache {
+    	default "1";
+    	"~GET:::*https*" "1";
+    	"~GET:::*:*" "";
     }
 
-    # ht(passwd|access)
-    location ~* /\.ht  { deny all; }
-
-    # repositories
-    location ~* \.(hg|svn|git|bzr)$ { deny all; }
-
-    # use the file system to access files outside the site (cache)
-    location ~* /\.\./ { deny all; }
-    location ~* ^/bitrix/html_pages/\.config\.php { deny all; }
-    location ~* ^/bitrix/html_pages/\.enabled { deny all; }
-
-    # Intenal locations
-    location ^~ /upload/support/not_image   { internal; }
-
-    # Player options, disable no-sniff
-    location ~* ^/bitrix/components/bitrix/player/mediaplayer/player$ {
-        add_header Access-Control-Allow-Origin *;
-    }
-
-    # Accept access for merged css and js
-    location ~* ^/bitrix/cache/(css/.+\.css|js/.+\.js)$ {
-        expires 30d;
-        error_page 404 /404.html;
-    }
-
-    # Disable access for other assets in cache location
-    location ~* ^/bitrix/cache              { deny all; }
-
-    # Static content
-    location ~* ^/(upload|bitrix/images|bitrix/tmp) {
-        expires 30d;
-    }
-
-    location ~ \.php$ {
-        location ~* /\.\./ { internal; }
-        location ~ /\.[^/]+$ { internal; }
-        location ~* ^/upload/1c_[^/]+/ { internal; }
-        location ~* ^/(bitrix/(cache|images|tmp)|upload)/ { internal; }
-        location ~* ^/bitrix/(footer|header|license_key)\.php$ { internal; }
-        location ~* ^/(bitrix|local)/components/(.*)/(.*)/(class|component)\.php$ { internal; }
-        location ~* ^/(bitrix|local)/(backup|blocks|bx_cloud_upload|local_cache|module|modules|managed_cache|php_interface|public|stack_cache)/ { internal; }
-
-        try_files $uri =404;
-        fastcgi_split_path_info ^(.+\.php)(/.+)$;
-        fastcgi_pass php:9000;
-        fastcgi_index index.php;
-        fastcgi_read_timeout 60;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-        fastcgi_param PATH_INFO $fastcgi_path_info;
-        fastcgi_param REMOTE_ADDR $http_x_real_ip;
-        fastcgi_param REMOTE_USER $http_authorization;
-
-        # параметры https
-        fastcgi_param HTTPS on;
-        fastcgi_param HTTP_HTTPS on;
-    }
-
-    if ($request_uri ~ ^(.*)/index.(html|php)) { return 301 $1/$is_args$args; }
-
-    # Cache location: composite and general site
-    location ~* @.*\.html$ {
-        internal;
-        # disable browser cache, php manage file
-        expires -1y;
-        add_header X-Bitrix-Composite "Nginx (file)";
-    }
-
-    location / {
-        location ~* ^/(bitrix|local)/(backup|blocks|bx_cloud_upload|local_cache|module|modules|managed_cache|php_interface|public|stack_cache)/ { internal; }
-        location ~ /\.[^/]+$ { internal; }
-        location ~* ^/upload/1c_[^/]+/ { internal; }
-
-        set $basepath_cache "/bitrix/html_pages";
-        set $i "index@";
-
-        # Try different variations of cached html first
-        try_files $basepath_cache/$host$uri$i${args}.html$usecache
-                  $basepath_cache/$host$uri$i${args}=.html$usecache
-                  $basepath_cache/$host$uri/$i${args}.html$usecache
-                  $basepath_cache/$host$uri/$i${args}=.html$usecache
-                  $uri $uri/ /bitrix/routing_index.php$is_args$args;
-    }
+    # include conf website
+    include /etc/nginx/conf.d/*;
 }

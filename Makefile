@@ -36,11 +36,6 @@ copyrestore:
 	  cp ./docker/initdata/restore.php ./www/restore.php; \
 	fi
 
-clearlogs: #Удаляем старые логи: cron, nginx, php
-	docker exec -it ${COMPOSE_PROJECT_NAME}-cron sh -c "rm -f /var/log/cron/cron_events.log" && \
-	docker exec -it ${COMPOSE_PROJECT_NAME}-nginx sh -c "rm -f /var/log/nginx/error.log" && \
-	docker exec -it --user root ${COMPOSE_PROJECT_NAME}-php bash -c "chmod -R 0777 /var/log/php && find /var/log/php/ -exec rm -f {} \;"
-
 setupclear: ## Очищаем мусор после установки битрикса
 	@$(MAKE) rmgit
 	@$(MAKE) rmbitrix
@@ -57,7 +52,7 @@ sethost: #установим host ip в .hosts контейнера php
 	docker exec -it --user root ${COMPOSE_PROJECT_NAME}-php bash -c "echo '${NGINX_IP} ${NGINX_HOST}' >> /etc/hosts"
 
 sertadd: #Обновим общесистемный список доверенных CA контейнера php
-	docker exec -it --user root ${COMPOSE_PROJECT_NAME}-php bash -c "update-ca-certificates"
+	docker exec -it --user root ${COMPOSE_PROJECT_NAME}-php bash -c "cat /usr/local/share/ca-certificates/rootCA.pem > /usr/local/share/ca-certificates/rootmkcertCA.crt && update-ca-certificates"
 
 ##
 ##╔                           ╗
@@ -73,7 +68,6 @@ dc-build: ## Сборка образа php и cron в нужном порядк�
 
 dc-up: ## Создаем(если нет) образы и контейнеры, запускаем контейнеры.
 	docker-compose up -d
-	@$(MAKE) clearlogs
 	@$(MAKE) sethost
 	@$(MAKE) sertadd
 	@$(MAKE) gh-check

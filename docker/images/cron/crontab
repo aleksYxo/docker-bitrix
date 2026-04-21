@@ -18,4 +18,5 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 47 6    * * 7   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.weekly )
 52 6    1 * *   root    test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.monthly )
 
-* * * * * root su -s /bin/bash -c "php /var/www/html/local/modules/zebrains.base/console/cron_events.php" www-data >> /var/log/cron/cron_events.log 2>&1
+# Для перевода агентов на cron указать правильный путь и раскоментировать задание. Подробней https://dev.1c-bitrix.ru/learning/course/?COURSE_ID=43&LESSON_ID=2943
+# * * * * * root su -s /bin/bash -c "php /var/www/html/local/php_interface/cron_events.php" www-data >> /var/log/cron_events.log 2>&1
